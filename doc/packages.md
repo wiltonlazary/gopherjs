@@ -129,7 +129,7 @@ On each commit, Circle CI automatically compiles all supported packages with Gop
 | reflect         | yes                   | except StructOf (pending)         |
 | regexp          | yes                   |                                   |
 | -- syntax       | yes                   |                                   |
-| runtime         | partially             |                                   |
+| runtime         | partially             | SetMutexProfileFraction unsupported |
 | -- cgo          | no                    |                                   |
 | -- debug        | no                    |                                   |
 | -- pprof        | no                    |                                   |
