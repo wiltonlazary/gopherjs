@@ -42,9 +42,9 @@ func runtimeNano() int64 {
 	return js.Global.Get("Date").New().Call("getTime").Int64() * int64(Millisecond)
 }
 
-func now() (sec int64, nsec int32) {
+func now() (sec int64, nsec int32, mono int64) {
 	n := runtimeNano()
-	return n / int64(Second), int32(n % int64(Second))
+	return n / int64(Second), int32(n % int64(Second)), n
 }
 
 func Sleep(d Duration) {
@@ -64,11 +64,11 @@ func startTimer(t *runtimeTimer) {
 	}
 	t.timeout = js.Global.Call("$setTimeout", js.InternalObject(func() {
 		t.active = false
-		go t.f(t.arg, 0)
 		if t.period != 0 {
 			t.when += t.period
 			startTimer(t)
 		}
+		go t.f(t.arg, 0)
 	}), diff+1)
 }
 

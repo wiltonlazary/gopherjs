@@ -43,6 +43,9 @@ var dummys = js.Global.Call("eval", `({
 	call: function(f, a) {
 		f(a);
 	},
+	return: function(x) {
+		return x;
+	},
 })`)
 
 func TestBool(t *testing.T) {
@@ -556,5 +559,41 @@ func TestSurrogatePairs(t *testing.T) {
 	}
 	if str.String() != "\U0001F600" {
 		t.Fail()
+	}
+}
+
+func TestUint8Array(t *testing.T) {
+	uint8Array := js.Global.Get("Uint8Array")
+	if dummys.Call("return", []byte{}).Get("constructor") != uint8Array {
+		t.Errorf("Empty byte array is not externalized as a Uint8Array")
+	}
+	if dummys.Call("return", []byte{0x01}).Get("constructor") != uint8Array {
+		t.Errorf("Non-empty byte array is not externalized as a Uint8Array")
+	}
+}
+
+func TestTypeSwitchJSObject(t *testing.T) {
+	obj := js.Global.Get("Object").New()
+	obj.Set("foo", "bar")
+
+	want := "bar"
+
+	if got := obj.Get("foo").String(); got != want {
+		t.Errorf("Direct access to *js.Object field gave %q, want %q", got, want)
+	}
+
+	var x interface{} = obj
+
+	switch x := x.(type) {
+	case *js.Object:
+		if got := x.Get("foo").String(); got != want {
+			t.Errorf("Value passed through interface and type switch gave %q, want %q", got, want)
+		}
+	}
+
+	if y, ok := x.(*js.Object); ok {
+		if got := y.Get("foo").String(); got != want {
+			t.Errorf("Value passed through interface and type assert gave %q, want %q", got, want)
+		}
 	}
 }

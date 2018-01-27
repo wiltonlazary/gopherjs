@@ -14,10 +14,6 @@ import (
 	"github.com/gopherjs/gopherjs/compiler/typesutil"
 )
 
-type this struct {
-	ast.Ident
-}
-
 func (c *funcContext) translateStmtList(stmts []ast.Stmt) {
 	for _, stmt := range stmts {
 		c.translateStmt(stmt, nil)
@@ -127,7 +123,9 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			var bodyPrefix []ast.Stmt
 			if implicit := c.p.Implicits[clause]; implicit != nil {
 				value := refVar
-				if _, isInterface := implicit.Type().Underlying().(*types.Interface); !isInterface {
+				if typesutil.IsJsObject(implicit.Type().Underlying()) {
+					value += ".$val.object"
+				} else if _, ok := implicit.Type().Underlying().(*types.Interface); !ok {
 					value += ".$val"
 				}
 				bodyPrefix = []ast.Stmt{&ast.AssignStmt{
@@ -311,6 +309,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		rVal := c.translateResults(results)
 		if len(c.Flattened) != 0 {
 			c.Printf("$s = -1; return%s;", rVal)
+			return
 		}
 		c.Printf("return%s;", rVal)
 
@@ -329,7 +328,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			isJs = typesutil.IsJsPackage(c.p.Uses[fun.Sel].Pkg())
 		}
 		sig := c.p.TypeOf(s.Call.Fun).Underlying().(*types.Signature)
-		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid(), true)
+		args := c.translateArgs(sig, s.Call.Args, s.Call.Ellipsis.IsValid())
 		if isBuiltin || isJs {
 			vars := make([]string, len(s.Call.Args))
 			callArgs := make([]ast.Expr, len(s.Call.Args))
@@ -357,9 +356,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		case len(s.Lhs) == 1 && len(s.Rhs) == 1:
 			lhs := astutil.RemoveParens(s.Lhs[0])
 			if isBlank(lhs) {
-				if analysis.HasSideEffect(s.Rhs[0], c.p.Info.Info) {
-					c.Printf("%s;", c.translateExpr(s.Rhs[0]))
-				}
+				c.Printf("$unused(%s);", c.translateExpr(s.Rhs[0]))
 				return
 			}
 			c.Printf("%s", c.translateAssign(lhs, s.Rhs[0], s.Tok == token.DEFINE))
@@ -379,9 +376,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 			for i, rhs := range s.Rhs {
 				tmpVars[i] = c.newVariable("_tmp")
 				if isBlank(astutil.RemoveParens(s.Lhs[i])) {
-					if analysis.HasSideEffect(rhs, c.p.Info.Info) {
-						c.Printf("%s;", c.translateExpr(rhs))
-					}
+					c.Printf("$unused(%s);", c.translateExpr(rhs))
 					continue
 				}
 				c.Printf("%s", c.translateAssign(c.newIdent(tmpVars[i], c.p.TypeOf(s.Lhs[i])), rhs, true))
@@ -446,7 +441,7 @@ func (c *funcContext) translateStmt(stmt ast.Stmt, label *types.Label) {
 		c.translateStmt(s.Stmt, label)
 
 	case *ast.GoStmt:
-		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.TypeOf(s.Call.Fun).Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid(), true), ", "))
+		c.Printf("$go(%s, [%s]);", c.translateExpr(s.Call.Fun), strings.Join(c.translateArgs(c.p.TypeOf(s.Call.Fun).Underlying().(*types.Signature), s.Call.Args, s.Call.Ellipsis.IsValid()), ", "))
 
 	case *ast.SendStmt:
 		chanType := c.p.TypeOf(s.Chan).Underlying().(*types.Chan)

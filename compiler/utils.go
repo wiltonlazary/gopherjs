@@ -74,7 +74,7 @@ func (c *funcContext) Delayed(f func()) {
 	c.delayedOutput = c.CatchOutput(0, f)
 }
 
-func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, ellipsis, clone bool) []string {
+func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, ellipsis bool) []string {
 	if len(argExprs) == 1 {
 		if tuple, isTuple := c.p.TypeOf(argExprs[0]).(*types.Tuple); isTuple {
 			tupleVar := c.newVariable("_tuple")
@@ -108,13 +108,7 @@ func (c *funcContext) translateArgs(sig *types.Signature, argExprs []ast.Expr, e
 			argType = sig.Params().At(i).Type()
 		}
 
-		var arg string
-		switch {
-		case clone:
-			arg = c.translateImplicitConversionWithCloning(argExpr, argType).String()
-		default:
-			arg = c.translateImplicitConversion(argExpr, argType).String()
-		}
+		arg := c.translateImplicitConversionWithCloning(argExpr, argType).String()
 
 		if preserveOrder && c.p.Types[argExpr].Value == nil {
 			argVar := c.newVariable("_arg")
@@ -375,7 +369,12 @@ func (c *funcContext) handleEscapingVars(n ast.Node) {
 
 	var names []string
 	objs := analysis.EscapingObjects(n, c.p.Info.Info)
-	sort.Sort(varsByName(objs))
+	sort.Slice(objs, func(i, j int) bool {
+		if objs[i].Name() == objs[j].Name() {
+			return objs[i].Pos() < objs[j].Pos()
+		}
+		return objs[i].Name() < objs[j].Name()
+	})
 	for _, obj := range objs {
 		names = append(names, c.objectName(obj))
 		c.p.escapingVars[obj] = true
@@ -629,7 +628,7 @@ func rangeCheck(pattern string, constantIndex, array bool) string {
 	if !constantIndex {
 		check = "(%2f < 0 || " + check + ")"
 	}
-	return "(" + check + ` ? $throwRuntimeError("index out of range") : ` + pattern + ")"
+	return "(" + check + ` ? ($throwRuntimeError("index out of range"), undefined) : ` + pattern + ")"
 }
 
 func endsWithReturn(stmts []ast.Stmt) bool {
@@ -643,18 +642,4 @@ func endsWithReturn(stmts []ast.Stmt) bool {
 
 func encodeIdent(name string) string {
 	return strings.Replace(url.QueryEscape(name), "%", "$", -1)
-}
-
-type varsByName []*types.Var
-
-func (s varsByName) Len() int {
-	return len(s)
-}
-
-func (s varsByName) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (s varsByName) Less(i, j int) bool {
-	return s[i].Name() < s[j].Name()
 }
